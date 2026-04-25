@@ -184,9 +184,14 @@ index_batch(Ix, E, Pairs) ->
     end, {ok, []}, Pairs),
     case Result of
         {error, _} = Err -> Err;
-        {ok, RevPairs}   -> kvex:add_batch(Ix, lists:reverse(RevPairs))
+        {ok, RevPairs}   ->
+            case kvex:add_batch(Ix, lists:reverse(RevPairs)) of
+                ok              -> ok;
+                {error, Reason} -> {error, {batch_insert_failed, Reason}}
+            end
     end.
 
+%% Note: encode/2 returns a normalized vector; kvex:cosine_search normalizes again — idempotent for unit vectors.
 -spec search(kvex:index(), encoder(), binary(), pos_integer()) ->
     {ok, [{kvex:id(), float()}]} | {error, term()}.
 search(Ix, E, Query, K) ->

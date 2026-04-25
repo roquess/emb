@@ -161,7 +161,36 @@ f32_bin_to_list(<<>>) -> [];
 f32_bin_to_list(<<F:32/float-little, Rest/binary>>) ->
     [F | f32_bin_to_list(Rest)].
 
-new_index(_E)                -> error(not_implemented).
-index(_Ix, _E, _Id, _Text)   -> error(not_implemented).
-index_batch(_Ix, _E, _Pairs) -> error(not_implemented).
-search(_Ix, _E, _Text, _K)   -> error(not_implemented).
+-spec new_index(encoder()) -> {ok, kvex:index()}.
+new_index(#{dim := Dim}) ->
+    kvex:new(Dim).
+
+-spec index(kvex:index(), encoder(), kvex:id(), binary()) -> ok | {error, term()}.
+index(Ix, E, Id, Text) ->
+    case encode(E, Text) of
+        {error, _} = Err -> Err;
+        {ok, Vec}        -> kvex:add(Ix, Id, Vec)
+    end.
+
+-spec index_batch(kvex:index(), encoder(), [{kvex:id(), binary()}]) -> ok | {error, term()}.
+index_batch(Ix, E, Pairs) ->
+    Result = lists:foldl(fun
+        (_, {error, _} = Err) -> Err;
+        ({Id, Text}, {ok, Acc}) ->
+            case encode(E, Text) of
+                {error, _} = Err -> Err;
+                {ok, Vec}        -> {ok, [{Id, Vec} | Acc]}
+            end
+    end, {ok, []}, Pairs),
+    case Result of
+        {error, _} = Err -> Err;
+        {ok, RevPairs}   -> kvex:add_batch(Ix, lists:reverse(RevPairs))
+    end.
+
+-spec search(kvex:index(), encoder(), binary(), pos_integer()) ->
+    {ok, [{kvex:id(), float()}]} | {error, term()}.
+search(Ix, E, Query, K) ->
+    case encode(E, Query) of
+        {error, _} = Err -> Err;
+        {ok, Vec}        -> kvex:cosine_search(Ix, Vec, K)
+    end.

@@ -4,14 +4,14 @@
          cosine_identical/1, cosine_orthogonal/1, cosine_opposite/1, dot_basic/1,
          load_missing_tokenizer/1, load_missing_model/1,
          encode_returns_f32_binary/1, encode_normalized_unit_length/1,
-         encode_batch_returns_one_per_text/1]).
+         encode_batch_returns_one_per_text/1, index_and_search/1]).
 
 suite() -> [{timetrap, {seconds, 30}}].
 
 all() -> [cosine_identical, cosine_orthogonal, cosine_opposite, dot_basic,
           load_missing_tokenizer, load_missing_model,
           encode_returns_f32_binary, encode_normalized_unit_length,
-          encode_batch_returns_one_per_text].
+          encode_batch_returns_one_per_text, index_and_search].
 
 f32_bin(Floats) ->
     << <<F:32/float-little>> || F <- Floats >>.
@@ -92,4 +92,21 @@ encode_batch_returns_one_per_text(Config) ->
             Dim        = emb:dim(E),
             [true = (byte_size(V) =:= Dim * 4) || V <- Vecs],
             emb:unload(E)
+    end.
+
+index_and_search(Config) ->
+    {TokPath, ModelPath} = model_path(Config),
+    case filelib:is_regular(ModelPath) of
+        false -> {skip, "embedding model not present"};
+        true  ->
+            {ok, E}  = emb:load(#{tokenizer => TokPath, model => ModelPath}),
+            {ok, Ix} = emb:new_index(E),
+            ok = emb:index(Ix, E, <<"doc1">>, <<"the cat sat on the mat">>),
+            ok = emb:index(Ix, E, <<"doc2">>, <<"neural networks and deep learning">>),
+            ok = emb:index(Ix, E, <<"doc3">>, <<"erlang is a functional language">>),
+            {ok, Rs} = emb:search(Ix, E, <<"machine learning">>, 2),
+            2        = length(Rs),
+            [{_, _}, {_, _}] = Rs,
+            emb:unload(E),
+            kvex:delete(Ix)
     end.

@@ -71,7 +71,8 @@ detect_output(Session) ->
     case maps:get(outputs, Session) of
         [{Name, [_, _],    f32} | _] -> {Name, none};
         [{Name, [_, _, _], f32} | _] -> {Name, mean};
-        [{Name, _,         _}   | _] -> {Name, mean}
+        [{Name, _,         _}   | _] -> {Name, mean};
+        []                           -> error(no_model_outputs)
     end.
 
 detect_input_dtype(Session) ->
@@ -84,8 +85,9 @@ detect_input_dtype(Session) ->
 detect_dim(Session, OutName) ->
     Outputs = maps:get(outputs, Session),
     case lists:keyfind(OutName, 1, Outputs) of
-        {_, Shape, _} -> lists:last(Shape);
-        false         -> error({unknown_output, OutName})
+        {_, Shape, _} when Shape =/= [] -> lists:last(Shape);
+        {_, [], _}                      -> error({invalid_output_shape, OutName, empty});
+        false                           -> error({unknown_output, OutName})
     end.
 
 f32_bin_to_list(<<>>) -> [];

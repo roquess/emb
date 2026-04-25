@@ -1,6 +1,7 @@
 -module(emb_pool).
 -export([apply/4, l2_normalize/1]).
 
+%% SeqLen is accepted for API uniformity; mean pooling derives it implicitly from chunk/2.
 -spec apply(mean | cls | none, [float()], pos_integer(), {pos_integer(), [0|1]}) -> [float()].
 apply(mean, Floats, _SeqLen, {HidDim, Mask}) ->
     Rows     = chunk(Floats, HidDim),

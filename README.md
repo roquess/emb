@@ -28,6 +28,7 @@ Sim = emb:cosine(Vec1, Vec2),
 %% Index + search via kvex
 {ok, Ix} = emb:new_index(E),
 ok       = emb:index(Ix, E, <<"doc1">>, <<"some text">>),
+ok = emb:index_batch(Ix, E, [{<<"doc2">>, <<"more text">>}, {<<"doc3">>, <<"other">>}]),
 {ok, Rs} = emb:search(Ix, E, <<"query">>, 5),
 
 %% Clean up
@@ -93,7 +94,7 @@ optimum-cli export onnx --model sentence-transformers/all-MiniLM-L6-v2 ./model/
 - **Auto-detection**: pooling and dim are inferred from the model's ONNX output. 2D `[batch, dim]` → `pooling=none`; 3D `[batch, seq, dim]` → `pooling=mean`.
 - **Input dtype**: inferred from `input_ids` spec in the ONNX session (usually `i64` for BERT-family).
 - **`token_type_ids`**: only included in model inputs if the model declares it.
-- **normalize**: defaults to `true` — L2-normalized output enables cosine similarity via simple dot product, which kvex uses internally via sied SIMD.
+- **normalize**: defaults to `true` — L2-normalized output enables cosine similarity via simple dot product, which kvex uses internally via `sied`'s SIMD dot product.
 
 ## License
 

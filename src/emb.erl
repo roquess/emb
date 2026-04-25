@@ -12,27 +12,37 @@
              normalize  => boolean(),
              output_name => binary()}) -> {ok, encoder()} | {error, term()}.
 load(Opts) ->
-    TokPath   = maps:get(tokenizer, Opts),
-    ModelPath = maps:get(model, Opts),
+    case {maps:find(tokenizer, Opts), maps:find(model, Opts)} of
+        {{ok, TokPath}, {ok, ModelPath}} ->
+            do_load(TokPath, ModelPath, Opts);
+        _ ->
+            {error, {missing_required_opts, [tokenizer, model]}}
+    end.
+
+do_load(TokPath, ModelPath, Opts) ->
     case tok:load(TokPath) of
         {error, _} = Err -> Err;
         {ok, Tok}        ->
             case onyx:load(ModelPath) of
                 {error, _} = Err -> Err;
                 {ok, Session}    ->
-                    {AutoOut, AutoPool} = detect_output(Session),
-                    Pooling    = maps:get(pooling,      Opts, AutoPool),
-                    Normalize  = maps:get(normalize,    Opts, true),
-                    OutName    = maps:get(output_name,  Opts, AutoOut),
-                    InDType    = detect_input_dtype(Session),
-                    EmbDim     = detect_dim(Session, OutName),
-                    {ok, #{tok         => Tok,
-                           session     => Session,
-                           pooling     => Pooling,
-                           normalize   => Normalize,
-                           output_name => OutName,
-                           input_dtype => InDType,
-                           dim         => EmbDim}}
+                    try
+                        {AutoOut, AutoPool} = detect_output(Session),
+                        Pooling    = maps:get(pooling,      Opts, AutoPool),
+                        Normalize  = maps:get(normalize,    Opts, true),
+                        OutName    = maps:get(output_name,  Opts, AutoOut),
+                        InDType    = detect_input_dtype(Session),
+                        EmbDim     = detect_dim(Session, OutName),
+                        {ok, #{tok         => Tok,
+                               session     => Session,
+                               pooling     => Pooling,
+                               normalize   => Normalize,
+                               output_name => OutName,
+                               input_dtype => InDType,
+                               dim         => EmbDim}}
+                    catch
+                        error:Reason -> {error, Reason}
+                    end
             end
     end.
 
@@ -114,7 +124,7 @@ i32_to_tensor(_I32Bin, _Shape, DType) ->
 dim(#{dim := D}) -> D.
 
 -spec cosine(binary(), binary()) -> float().
-cosine(A, B) ->
+cosine(A, B) when byte_size(A) =:= byte_size(B) ->
     VA = f32_bin_to_list(A),
     VB = f32_bin_to_list(B),
     Dot   = lists:sum([X * Y || {X, Y} <- lists:zip(VA, VB)]),
@@ -123,13 +133,17 @@ cosine(A, B) ->
     case NormA * NormB < 1.0e-12 of
         true  -> 0.0;
         false -> Dot / (NormA * NormB)
-    end.
+    end;
+cosine(A, B) ->
+    error({dimension_mismatch, byte_size(A) div 4, byte_size(B) div 4}).
 
 -spec dot(binary(), binary()) -> float().
-dot(A, B) ->
+dot(A, B) when byte_size(A) =:= byte_size(B) ->
     VA = f32_bin_to_list(A),
     VB = f32_bin_to_list(B),
-    lists:sum([X * Y || {X, Y} <- lists:zip(VA, VB)]).
+    lists:sum([X * Y || {X, Y} <- lists:zip(VA, VB)]);
+dot(A, B) ->
+    error({dimension_mismatch, byte_size(A) div 4, byte_size(B) div 4}).
 
 %% Internal
 

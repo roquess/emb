@@ -3,13 +3,15 @@
 -export([all/0, suite/0,
          cosine_identical/1, cosine_orthogonal/1, cosine_opposite/1, dot_basic/1,
          load_missing_tokenizer/1, load_missing_model/1,
-         encode_returns_f32_binary/1, encode_normalized_unit_length/1]).
+         encode_returns_f32_binary/1, encode_normalized_unit_length/1,
+         encode_batch_returns_one_per_text/1]).
 
 suite() -> [{timetrap, {seconds, 30}}].
 
 all() -> [cosine_identical, cosine_orthogonal, cosine_opposite, dot_basic,
           load_missing_tokenizer, load_missing_model,
-          encode_returns_f32_binary, encode_normalized_unit_length].
+          encode_returns_f32_binary, encode_normalized_unit_length,
+          encode_batch_returns_one_per_text].
 
 f32_bin(Floats) ->
     << <<F:32/float-little>> || F <- Floats >>.
@@ -75,5 +77,19 @@ encode_normalized_unit_length(Config) ->
             Floats    = [F || <<F:32/float-little>> <= Vec],
             Norm      = math:sqrt(lists:sum([X * X || X <- Floats])),
             true      = abs(Norm - 1.0) < 1.0e-4,
+            emb:unload(E)
+    end.
+
+encode_batch_returns_one_per_text(Config) ->
+    {TokPath, ModelPath} = model_path(Config),
+    case filelib:is_regular(ModelPath) of
+        false -> {skip, "embedding model not present"};
+        true  ->
+            {ok, E}    = emb:load(#{tokenizer => TokPath, model => ModelPath}),
+            Texts      = [<<"Hello">>, <<"World">>, <<"foo bar">>],
+            {ok, Vecs} = emb:encode_batch(E, Texts),
+            3          = length(Vecs),
+            Dim        = emb:dim(E),
+            [true = (byte_size(V) =:= Dim * 4) || V <- Vecs],
             emb:unload(E)
     end.

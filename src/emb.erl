@@ -78,7 +78,20 @@ encode(#{tok := Tok, session := Session, pooling := Pooling,
             end
     end.
 
-encode_batch(_E, _Texts)     -> error(not_implemented).
+-spec encode_batch(encoder(), [binary()]) -> {ok, [binary()]} | {error, term()}.
+encode_batch(E, Texts) ->
+    Result = lists:foldl(fun
+        (_Text, {error, _} = Err) -> Err;
+        (Text, {ok, Acc}) ->
+            case encode(E, Text) of
+                {error, _} = Err -> Err;
+                {ok, Vec}        -> {ok, [Vec | Acc]}
+            end
+    end, {ok, []}, Texts),
+    case Result of
+        {error, _} = Err -> Err;
+        {ok, RevVecs}    -> {ok, lists:reverse(RevVecs)}
+    end.
 
 build_inputs(Session, IdsBin, MaskBin, TypeBin, MaxLen, DType) ->
     InputNames = [Name || {Name, _, _} <- maps:get(inputs, Session)],

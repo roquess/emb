@@ -1,0 +1,6 @@
+{application, emb, [
+    {description, "High-level embedding pipeline: tok + onyx + kvex"},
+    {vsn, "0.1.0"},
+    {applications, [kernel, stdlib, tok, onyx, kvex]},
+    {env, []}
+]}.

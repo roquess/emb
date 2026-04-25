@@ -5,6 +5,7 @@
 apply(mean, Floats, _SeqLen, {HidDim, Mask}) ->
     Rows     = chunk(Floats, HidDim),
     MaskSum  = lists:sum(Mask),
+    MaskSum > 0 orelse error({invalid_mask, all_padding}),
     Weighted = lists:foldl(
         fun({Row, M}, Acc) ->
             [A + V * M || {A, V} <- lists:zip(Acc, Row)]

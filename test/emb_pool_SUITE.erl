@@ -6,11 +6,12 @@
          l2_normalize_scale/1,
          mean_pool_uniform_mask/1,
          mean_pool_with_padding/1,
+         mean_pool_all_padding_crashes/1,
          cls_pool/1,
          none_pool/1]).
 
 all() -> [l2_normalize_unit_vec, l2_normalize_zero, l2_normalize_scale,
-          mean_pool_uniform_mask, mean_pool_with_padding, cls_pool, none_pool].
+          mean_pool_uniform_mask, mean_pool_with_padding, mean_pool_all_padding_crashes, cls_pool, none_pool].
 
 l2_normalize_unit_vec(_Config) ->
     [1.0, +0.0] = emb_pool:l2_normalize([1.0, 0.0]).
@@ -39,6 +40,14 @@ mean_pool_with_padding(_Config) ->
     [R1, R2] = emb_pool:apply(mean, Floats, 3, {2, [1, 1, 0]}),
     true = abs(R1 - 2.0) < 1.0e-6,
     true = abs(R2 - 2.0) < 1.0e-6.
+
+mean_pool_all_padding_crashes(_Config) ->
+    Floats = [1.0, 0.0, 3.0, 4.0],
+    try emb_pool:apply(mean, Floats, 2, {2, [0, 0]}) of
+        _ -> ct:fail("expected error")
+    catch
+        error:{invalid_mask, all_padding} -> ok
+    end.
 
 cls_pool(_Config) ->
     %% CLS = first HidDim elements of the flat list

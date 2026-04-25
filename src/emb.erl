@@ -6,11 +6,45 @@
 -opaque encoder() :: map().
 -export_type([encoder/0]).
 
-load(_Opts)                  -> error(not_implemented).
-unload(_E)                   -> ok.
+-spec load(#{tokenizer  := file:filename(),
+             model      := file:filename(),
+             pooling    => mean | cls | none,
+             normalize  => boolean(),
+             output_name => binary()}) -> {ok, encoder()} | {error, term()}.
+load(Opts) ->
+    TokPath   = maps:get(tokenizer, Opts),
+    ModelPath = maps:get(model, Opts),
+    case tok:load(TokPath) of
+        {error, _} = Err -> Err;
+        {ok, Tok}        ->
+            case onyx:load(ModelPath) of
+                {error, _} = Err -> Err;
+                {ok, Session}    ->
+                    {AutoOut, AutoPool} = detect_output(Session),
+                    Pooling    = maps:get(pooling,      Opts, AutoPool),
+                    Normalize  = maps:get(normalize,    Opts, true),
+                    OutName    = maps:get(output_name,  Opts, AutoOut),
+                    InDType    = detect_input_dtype(Session),
+                    EmbDim     = detect_dim(Session, OutName),
+                    {ok, #{tok         => Tok,
+                           session     => Session,
+                           pooling     => Pooling,
+                           normalize   => Normalize,
+                           output_name => OutName,
+                           input_dtype => InDType,
+                           dim         => EmbDim}}
+            end
+    end.
+
+-spec unload(encoder()) -> ok.
+unload(#{session := Session}) ->
+    onyx:unload(Session).
+
 encode(_E, _Text)            -> error(not_implemented).
 encode_batch(_E, _Texts)     -> error(not_implemented).
-dim(_E)                      -> error(not_implemented).
+
+-spec dim(encoder()) -> pos_integer().
+dim(#{dim := D}) -> D.
 
 -spec cosine(binary(), binary()) -> float().
 cosine(A, B) ->
@@ -31,6 +65,29 @@ dot(A, B) ->
     lists:sum([X * Y || {X, Y} <- lists:zip(VA, VB)]).
 
 %% Internal
+
+%% Inspect model outputs: 2D [batch,dim] -> pooling=none; 3D [batch,seq,dim] -> pooling=mean.
+detect_output(Session) ->
+    case maps:get(outputs, Session) of
+        [{Name, [_, _],    f32} | _] -> {Name, none};
+        [{Name, [_, _, _], f32} | _] -> {Name, mean};
+        [{Name, _,         _}   | _] -> {Name, mean}
+    end.
+
+detect_input_dtype(Session) ->
+    Inputs = maps:get(inputs, Session),
+    case lists:keyfind(<<"input_ids">>, 1, Inputs) of
+        {_, _, DType} -> DType;
+        false         -> i64
+    end.
+
+detect_dim(Session, OutName) ->
+    Outputs = maps:get(outputs, Session),
+    case lists:keyfind(OutName, 1, Outputs) of
+        {_, Shape, _} -> lists:last(Shape);
+        false         -> error({unknown_output, OutName})
+    end.
+
 f32_bin_to_list(<<>>) -> [];
 f32_bin_to_list(<<F:32/float-little, Rest/binary>>) ->
     [F | f32_bin_to_list(Rest)].

@@ -1,0 +1,28 @@
+{
+  "version": "1.0",
+  "truncation": {"direction": "Right", "strategy": "LongestFirst", "stride": 0, "max_length": 8},
+  "padding": {"pad_id": 0, "pad_token": "[PAD]"},
+  "normalizer": {
+    "type": "BertNormalizer",
+    "clean_text": true,
+    "handle_chinese_chars": false,
+    "strip_accents": null,
+    "lowercase": false
+  },
+  "pre_tokenizer": {"type": "BertPreTokenizer"},
+  "model": {
+    "type": "WordPiece",
+    "unk_token": "[UNK]",
+    "continuing_subword_prefix": "##",
+    "max_input_chars_per_word": 100,
+    "vocab": {
+      "[PAD]": 0,
+      "[UNK]": 100,
+      "[CLS]": 101,
+      "[SEP]": 102,
+      "hello": 200,
+      "world": 201,
+      "##s": 202
+    }
+  }
+}

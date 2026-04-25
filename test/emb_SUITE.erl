@@ -2,12 +2,14 @@
 -include_lib("common_test/include/ct.hrl").
 -export([all/0, suite/0,
          cosine_identical/1, cosine_orthogonal/1, cosine_opposite/1, dot_basic/1,
-         load_missing_tokenizer/1, load_missing_model/1]).
+         load_missing_tokenizer/1, load_missing_model/1,
+         encode_returns_f32_binary/1, encode_normalized_unit_length/1]).
 
 suite() -> [{timetrap, {seconds, 30}}].
 
 all() -> [cosine_identical, cosine_orthogonal, cosine_opposite, dot_basic,
-          load_missing_tokenizer, load_missing_model].
+          load_missing_tokenizer, load_missing_model,
+          encode_returns_f32_binary, encode_normalized_unit_length].
 
 f32_bin(Floats) ->
     << <<F:32/float-little>> || F <- Floats >>.
@@ -44,3 +46,34 @@ load_missing_model(Config) ->
     TokPath = filename:join(DataDir, "tokenizer.json"),
     {error, _} = emb:load(#{tokenizer => TokPath,
                              model     => "/nonexistent/model.onnx"}).
+
+model_path(Config) ->
+    DataDir = ?config(data_dir, Config),
+    {filename:join(DataDir, "model/tokenizer.json"),
+     filename:join(DataDir, "model/model.onnx")}.
+
+encode_returns_f32_binary(Config) ->
+    {TokPath, ModelPath} = model_path(Config),
+    case filelib:is_regular(ModelPath) of
+        false -> {skip, "embedding model not present"};
+        true  ->
+            {ok, E}   = emb:load(#{tokenizer => TokPath, model => ModelPath}),
+            {ok, Vec} = emb:encode(E, <<"Hello world">>),
+            Dim       = emb:dim(E),
+            true      = (Dim * 4 =:= byte_size(Vec)),
+            emb:unload(E)
+    end.
+
+encode_normalized_unit_length(Config) ->
+    {TokPath, ModelPath} = model_path(Config),
+    case filelib:is_regular(ModelPath) of
+        false -> {skip, "embedding model not present"};
+        true  ->
+            {ok, E}   = emb:load(#{tokenizer => TokPath, model => ModelPath,
+                                    normalize => true}),
+            {ok, Vec} = emb:encode(E, <<"Hello world">>),
+            Floats    = [F || <<F:32/float-little>> <= Vec],
+            Norm      = math:sqrt(lists:sum([X * X || X <- Floats])),
+            true      = abs(Norm - 1.0) < 1.0e-4,
+            emb:unload(E)
+    end.

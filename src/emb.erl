@@ -40,8 +40,51 @@ load(Opts) ->
 unload(#{session := Session}) ->
     onyx:unload(Session).
 
-encode(_E, _Text)            -> error(not_implemented).
+-spec encode(encoder(), binary()) -> {ok, binary()} | {error, term()}.
+encode(#{tok := Tok, session := Session, pooling := Pooling,
+         normalize := Normalize, output_name := OutName,
+         input_dtype := InDType}, Text) ->
+    {IdsBin, MaskBin, TypeBin} = tok:encode(Tok, Text),
+    MaxLen  = byte_size(IdsBin) div 4,
+    Inputs  = build_inputs(Session, IdsBin, MaskBin, TypeBin, MaxLen, InDType),
+    case onyx:run(Session, Inputs) of
+        {error, _} = Err -> Err;
+        {ok, Outputs}    ->
+            Tensor   = maps:get(OutName, Outputs),
+            Floats   = onyx:to_list(Tensor),
+            MaskList = [M || <<M:32/signed-little>> <= MaskBin],
+            {_, Shape, _} = Tensor,
+            {SeqLen, HidDim} = case Shape of
+                [_, S, H] -> {S, H};
+                [_, H]    -> {1, H}
+            end,
+            Pooled = emb_pool:apply(Pooling, Floats, SeqLen, {HidDim, MaskList}),
+            Final  = case Normalize of
+                true  -> emb_pool:l2_normalize(Pooled);
+                false -> Pooled
+            end,
+            {ok, << <<F:32/float-little>> || F <- Final >>}
+    end.
+
 encode_batch(_E, _Texts)     -> error(not_implemented).
+
+build_inputs(Session, IdsBin, MaskBin, TypeBin, MaxLen, DType) ->
+    InputNames = [Name || {Name, _, _} <- maps:get(inputs, Session)],
+    Candidates = #{
+        <<"input_ids">>      => i32_to_tensor(IdsBin,  [1, MaxLen], DType),
+        <<"attention_mask">> => i32_to_tensor(MaskBin, [1, MaxLen], DType),
+        <<"token_type_ids">> => i32_to_tensor(TypeBin, [1, MaxLen], DType)
+    },
+    maps:filter(fun(K, _) -> lists:member(K, InputNames) end, Candidates).
+
+i32_to_tensor(I32Bin, Shape, i32) ->
+    onyx:tensor(I32Bin, Shape, i32);
+i32_to_tensor(I32Bin, Shape, i64) ->
+    I64Bin = << <<V:64/signed-little>> || <<V:32/signed-little>> <= I32Bin >>,
+    onyx:tensor(I64Bin, Shape, i64);
+i32_to_tensor(I32Bin, Shape, DType) ->
+    I64Bin = << <<V:64/signed-little>> || <<V:32/signed-little>> <= I32Bin >>,
+    onyx:tensor(I64Bin, Shape, DType).
 
 -spec dim(encoder()) -> pos_integer().
 dim(#{dim := D}) -> D.

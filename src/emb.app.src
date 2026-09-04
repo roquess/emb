@@ -1,6 +1,6 @@
 {application, emb, [
     {description, "High-level embedding pipeline: tok + onyx + kvex"},
-    {vsn, "0.1.1"},
+    {vsn, "0.1.2"},
     {applications, [kernel, stdlib, tok, onyx, kvex]},
     {env, []},
     {licenses, ["Apache-2.0"]},
